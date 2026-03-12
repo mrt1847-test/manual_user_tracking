@@ -3,10 +3,10 @@
 이벤트 타입별로 검증 수행
 """
 import json
-import os
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any, Union
 from utils.NetworkTracker import NetworkTracker
+from utils.app_paths import get_config_path, get_tracking_schemas_root
 
 # 이벤트 타입과 메서드 이름 매핑
 EVENT_TYPE_METHODS = {
@@ -120,7 +120,7 @@ def load_module_config(
     if area is None:
         area = detect_area_from_feature_path(feature_path)
     
-    config_base_path = Path(__file__).parent.parent / 'tracking_schemas' / platform / area
+    config_base_path = get_tracking_schemas_root() / platform / area
     
     # module_title이 지정된 경우 해당 파일만 로드
     if module_title:
@@ -407,7 +407,7 @@ def _process_config_section(
 
 def _load_config() -> Dict[str, Any]:
     """config.json 파일 로드"""
-    config_path = Path(__file__).parent.parent / 'config.json'
+    config_path = get_config_path()
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)

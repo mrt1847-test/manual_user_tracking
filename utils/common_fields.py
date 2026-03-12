@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
+from utils.app_paths import get_common_fields_by_event_path
 from utils.google_sheets_sync import unflatten_json
 
 
@@ -58,10 +59,7 @@ def load_common_fields_by_event(common_fields_path: Optional[Path] = None) -> Di
         {event_type: {path: {"field": "...", "value": "..."}}}
     """
     if common_fields_path is None:
-        # 프로젝트 루트 찾기
-        current_file = Path(__file__)
-        project_root = current_file.parent.parent
-        common_fields_path = project_root / 'tracking_schemas' / '_common_fields_by_event.json'
+        common_fields_path = get_common_fields_by_event_path()
     
     if not common_fields_path.exists():
         return {}

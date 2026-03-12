@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from utils.NetworkTracker import NetworkTracker
+from utils.app_paths import get_config_path, get_tracking_schemas_root
 from utils.validation_helpers import (
     EVENT_TYPE_CONFIG_KEY_MAP,
     MINIDETAIL_PRICE_EXCLUDE_FIELDS,
@@ -68,8 +69,8 @@ class ManualValidationResult:
 
 class ManualValidationService:
     def __init__(self, schema_root: Optional[Path] = None):
-        self.schema_root = schema_root or (Path(__file__).resolve().parent.parent / "tracking_schemas")
-        self._config_path = Path(__file__).resolve().parent.parent / "config.json"
+        self.schema_root = schema_root or get_tracking_schemas_root()
+        self._config_path = get_config_path()
 
     def _get_platform_schema_root(self, platform: str) -> Path:
         normalized_platform = (platform or "").strip().lower()
