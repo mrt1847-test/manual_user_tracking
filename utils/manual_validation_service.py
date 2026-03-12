@@ -71,6 +71,12 @@ class ManualValidationService:
         self.schema_root = schema_root or (Path(__file__).resolve().parent.parent / "tracking_schemas")
         self._config_path = Path(__file__).resolve().parent.parent / "config.json"
 
+    def _get_platform_schema_root(self, platform: str) -> Path:
+        normalized_platform = (platform or "").strip().lower()
+        if not normalized_platform:
+            raise ValueError("플랫폼(platform)을 선택해주세요.")
+        return self.schema_root / normalized_platform
+
     def get_default_environment(self) -> str:
         try:
             with open(self._config_path, "r", encoding="utf-8") as file:
@@ -79,17 +85,18 @@ class ManualValidationService:
             return "prod"
         return str(config.get("environment", "prod"))
 
-    def list_areas(self) -> List[str]:
-        if not self.schema_root.exists():
+    def list_areas(self, platform: str) -> List[str]:
+        platform_root = self._get_platform_schema_root(platform)
+        if not platform_root.exists():
             return []
         return sorted(
             path.name
-            for path in self.schema_root.iterdir()
+            for path in platform_root.iterdir()
             if path.is_dir() and not path.name.startswith("_")
         )
 
-    def list_modules(self, area: str) -> List[str]:
-        area_path = self.schema_root / area
+    def list_modules(self, platform: str, area: str) -> List[str]:
+        area_path = self._get_platform_schema_root(platform) / area
         if not area_path.exists():
             return []
 
@@ -101,8 +108,8 @@ class ManualValidationService:
             modules.add(match.group("base") if match else path.stem)
         return sorted(modules)
 
-    def list_nth_values(self, area: str, module_title: str) -> List[str]:
-        area_path = self.schema_root / area
+    def list_nth_values(self, platform: str, area: str, module_title: str) -> List[str]:
+        area_path = self._get_platform_schema_root(platform) / area
         if not area_path.exists():
             return []
 
@@ -113,8 +120,8 @@ class ManualValidationService:
                 nth_values.append(match.group("nth"))
         return sorted(set(nth_values), key=lambda value: int(value))
 
-    def list_event_types(self, area: str, module_title: str, nth: Optional[str] = None) -> List[str]:
-        module_config = self.load_module_config_with_path(area, module_title, nth)["config"]
+    def list_event_types(self, platform: str, area: str, module_title: str, nth: Optional[str] = None) -> List[str]:
+        module_config = self.load_module_config_with_path(platform, area, module_title, nth)["config"]
         events = []
         for event_type, config_key in EVENT_TYPE_CONFIG_KEY_MAP.items():
             if config_key in module_config:
@@ -123,6 +130,7 @@ class ManualValidationService:
 
     def load_module_config_with_path(
         self,
+        platform: str,
         area: str,
         module_title: str,
         nth: Optional[str] = None
@@ -132,9 +140,9 @@ class ManualValidationService:
         if not module_title:
             raise ValueError("모듈(module_title)을 선택해주세요.")
 
-        area_path = self.schema_root / area
+        area_path = self._get_platform_schema_root(platform) / area
         if not area_path.exists():
-            raise ValueError(f"존재하지 않는 영역입니다: {area}")
+            raise ValueError(f"존재하지 않는 플랫폼/영역입니다: {platform}/{area}")
 
         config_path = area_path / f"{module_title}.json"
         if nth is not None and str(nth).strip():
@@ -142,7 +150,7 @@ class ManualValidationService:
             if nth_path.exists():
                 config_path = nth_path
 
-        module_config = load_module_config(area=area, module_title=module_title, nth=nth)
+        module_config = load_module_config(area=area, module_title=module_title, nth=nth, platform=platform)
         if not module_config:
             raise ValueError(f"스키마 파일을 찾을 수 없습니다: {config_path}")
 
@@ -153,12 +161,13 @@ class ManualValidationService:
 
     def get_schema_preview(
         self,
+        platform: str,
         area: str,
         module_title: str,
         nth: Optional[str] = None,
         event_type: Optional[str] = None
     ) -> str:
-        loaded = self.load_module_config_with_path(area, module_title, nth)
+        loaded = self.load_module_config_with_path(platform, area, module_title, nth)
         module_config = loaded["config"]
         if event_type:
             config_key = EVENT_TYPE_CONFIG_KEY_MAP.get(event_type)
@@ -172,7 +181,7 @@ class ManualValidationService:
         goodscode = request.goodscode.strip()
         goodscode_for_validation = goodscode or None
 
-        loaded = self.load_module_config_with_path(request.area, request.module_title, request.nth)
+        loaded = self.load_module_config_with_path(request.platform, request.area, request.module_title, request.nth)
         module_config = loaded["config"]
         config_key = EVENT_TYPE_CONFIG_KEY_MAP.get(request.event_type)
         if not config_key or config_key not in module_config:

@@ -149,6 +149,7 @@ class ManualValidatorWindow(QMainWindow):
         self.tab_widget.addTab(self.errors_preview, "오류")
         right_layout.addWidget(self.tab_widget, 1)
 
+        self.platform_combo.currentTextChanged.connect(self._on_platform_changed)
         self.area_combo.currentTextChanged.connect(self._on_area_changed)
         self.module_combo.currentTextChanged.connect(self._on_module_changed)
         self.nth_combo.currentTextChanged.connect(self._on_nth_changed)
@@ -164,17 +165,21 @@ class ManualValidatorWindow(QMainWindow):
 
     def _load_initial_data(self) -> None:
         self.environment_combo.setCurrentText(self.service.get_default_environment())
+        self._on_platform_changed()
 
+    def _on_platform_changed(self) -> None:
+        platform = self.platform_combo.currentText()
         self.area_combo.blockSignals(True)
         self.area_combo.clear()
-        self.area_combo.addItems(self.service.list_areas())
+        self.area_combo.addItems(self.service.list_areas(platform))
         self.area_combo.blockSignals(False)
 
         self._on_area_changed()
 
     def _on_area_changed(self) -> None:
+        platform = self.platform_combo.currentText()
         area = self.area_combo.currentText()
-        modules = self.service.list_modules(area) if area else []
+        modules = self.service.list_modules(platform, area) if area else []
 
         self.module_combo.blockSignals(True)
         self.module_combo.clear()
@@ -184,9 +189,10 @@ class ManualValidatorWindow(QMainWindow):
         self._on_module_changed()
 
     def _on_module_changed(self) -> None:
+        platform = self.platform_combo.currentText()
         area = self.area_combo.currentText()
         module_title = self.module_combo.currentText()
-        nth_values = self.service.list_nth_values(area, module_title) if area and module_title else []
+        nth_values = self.service.list_nth_values(platform, area, module_title) if area and module_title else []
 
         self.nth_combo.blockSignals(True)
         self.nth_combo.clear()
@@ -198,11 +204,12 @@ class ManualValidatorWindow(QMainWindow):
         self._on_nth_changed()
 
     def _on_nth_changed(self) -> None:
+        platform = self.platform_combo.currentText()
         area = self.area_combo.currentText()
         module_title = self.module_combo.currentText()
         nth = self.nth_combo.currentData()
 
-        events = self.service.list_event_types(area, module_title, nth) if area and module_title else []
+        events = self.service.list_event_types(platform, area, module_title, nth) if area and module_title else []
         self.event_combo.blockSignals(True)
         self.event_combo.clear()
         self.event_combo.addItems(events)
@@ -211,6 +218,7 @@ class ManualValidatorWindow(QMainWindow):
         self._refresh_schema_preview()
 
     def _refresh_schema_preview(self) -> None:
+        platform = self.platform_combo.currentText()
         area = self.area_combo.currentText()
         module_title = self.module_combo.currentText()
         event_type = self.event_combo.currentText()
@@ -222,8 +230,8 @@ class ManualValidatorWindow(QMainWindow):
             return
 
         try:
-            loaded = self.service.load_module_config_with_path(area, module_title, nth)
-            preview = self.service.get_schema_preview(area, module_title, nth, event_type or None)
+            loaded = self.service.load_module_config_with_path(platform, area, module_title, nth)
+            preview = self.service.get_schema_preview(platform, area, module_title, nth, event_type or None)
         except Exception as exc:
             self.schema_preview.setPlainText(str(exc))
             self.schema_path_label.setText("")
