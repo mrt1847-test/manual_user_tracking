@@ -742,8 +742,24 @@ class NetworkTracker:
                 else:
                     message = f"기대값 (리스트 중 하나): {expected_value}, 실제값: {actual_value}"
             else:
-                contains_match_fields = {"spm", "spm-url", "spm-pre", "spm-cnt"}
-                if key in contains_match_fields and isinstance(expected_value, str) and isinstance(actual_value, str):
+                # ab_buckets: 스키마 비어있으면 실제도 비어있어야 PASS; 스키마에 값 있으면 실제값에 스키마 값이 포함되면 PASS
+                if key == "ab_buckets" and isinstance(expected_value, str) and expected_value.strip() != "":
+                    if actual_value is not None and isinstance(actual_value, str):
+                        exp = expected_value.strip()
+                        act = actual_value.strip()
+                        if exp in act or act == exp:
+                            field_passed = True
+                        else:
+                            message = f"기대값(포함 검증): 실제값에 '{expected_value}'이 포함되어야 합니다. 실제값: {actual_value}"
+                    else:
+                        message = f"기대값(포함 검증): 실제값에 '{expected_value}'이 포함되어야 합니다. 실제값: {actual_value}"
+                elif key == "ab_buckets" and (expected_value is None or (isinstance(expected_value, str) and expected_value.strip() == "")):
+                    # 스키마가 비어있으면 실제도 비어있어야 함 (위 빈 문자열 분기에서 이미 처리되나, actual이 다른 타입이면 명시)
+                    if actual_value is None or (isinstance(actual_value, str) and actual_value.strip() == ""):
+                        field_passed = True
+                    else:
+                        message = f'기대값 (빈 문자열): "", 실제값: {actual_value}'
+                elif key in {"spm", "spm-url", "spm-pre", "spm-cnt"} and isinstance(expected_value, str) and isinstance(actual_value, str):
                     expected_normalized = re.sub(r"\d+$", "", expected_value)
                     actual_normalized = re.sub(r"\d+$", "", actual_value)
                     if (
