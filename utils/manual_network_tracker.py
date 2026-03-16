@@ -704,6 +704,13 @@ class NetworkTracker:
 
         return None
 
+    def _find_value_inside_utlogmap(self, payload: Dict[str, Any], target_key: str) -> Optional[Any]:
+        """payload에서 utLogMap을 재귀적으로 찾고, 그 노드 안에서만 target_key를 재귀 탐색한다."""
+        utlogmap_node = self._find_value_for_validation(payload, "utLogMap")
+        if utlogmap_node is None:
+            return None
+        return self._find_value_for_validation(utlogmap_node, target_key)
+
     def _validate_payload_fields(
         self,
         payload: Dict[str, Any],
@@ -715,8 +722,16 @@ class NetworkTracker:
         passed_fields: Dict[str, Any] = {}
         errors: List[str] = []
 
+        expected_data = dict(expected_data)
+        utlogmap_keys = expected_data.pop("__utLogMap_keys__", None) or set()
+
         for key, expected_value in expected_data.items():
-            actual_value = payload.get(key) if event_type == "PDP PV" else self._find_value_for_validation(payload, key)
+            if event_type == "PDP PV":
+                actual_value = payload.get(key)
+            elif key in utlogmap_keys:
+                actual_value = self._find_value_inside_utlogmap(payload, key)
+            else:
+                actual_value = self._find_value_for_validation(payload, key)
             field_passed = False
             message = ""
 

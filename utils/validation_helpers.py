@@ -4,7 +4,7 @@
 """
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from utils.NetworkTracker import NetworkTracker
 from utils.app_paths import get_config_path, get_tracking_schemas_root
 
@@ -324,31 +324,22 @@ def _process_config_section(
     is_common: bool = False,
     parent_path: str = '',
     is_utlogmap: bool = False,
-    environment_override: Optional[str] = None
+    environment_override: Optional[str] = None,
+    utlogmap_keys: Optional[Set[str]] = None,
 ):
     """
     config 섹션을 재귀적으로 처리하여 expected_values 딕셔너리 생성
-    
-    Args:
-        config_section: 처리할 config 섹션
-        event_type: 이벤트 타입
-        goodscode: 상품 번호
-        frontend_data: 프론트에서 읽은 데이터
-        exclude_fields: 제외할 필드 목록
-        expected: 결과를 저장할 딕셔너리
-        is_common: 공통 필드인지 여부
-        parent_path: 부모 경로 (디버깅용)
-        is_utlogmap: utLogMap 섹션인지 여부
+
+    utLogMap 하위 필드명은 utlogmap_keys에 수집하여, 검증 시 payload 전체가 아닌
+    utLogMap 노드 안에서만 해당 필드를 찾도록 한다.
     """
     if not isinstance(config_section, dict):
         return
-    
+
     for key, value in config_section.items():
-        # exclude_fields에 포함된 필드는 제외
         if key in exclude_fields:
             continue
-        
-        # utLogMap은 특별 처리 (재귀적으로 처리하되 필드명만 저장)
+
         if key == 'utLogMap' and isinstance(value, dict):
             _process_config_section(
                 value,
@@ -360,11 +351,11 @@ def _process_config_section(
                 is_common,
                 f"{parent_path}.{key}",
                 is_utlogmap=True,
-                environment_override=environment_override
+                environment_override=environment_override,
+                utlogmap_keys=utlogmap_keys,
             )
             continue
-        
-        # 값이 딕셔너리인 경우 재귀 처리
+
         if isinstance(value, dict):
             _process_config_section(
                 value,
@@ -376,33 +367,29 @@ def _process_config_section(
                 is_common,
                 f"{parent_path}.{key}",
                 is_utlogmap,
-                environment_override=environment_override
+                environment_override=environment_override,
+                utlogmap_keys=utlogmap_keys,
             )
         else:
-            # 리프 노드: expected에 추가
-            # utLogMap 내부 필드는 그대로 사용, 그 외는 key만 사용
             field_name = key if is_utlogmap else key
-            
-            # adProduct, adSubProduct 필드는 is_ad가 "Y"일 때만 검증
+
             if field_name in ('adProduct', 'adSubProduct'):
                 if frontend_data:
                     is_ad_value = frontend_data.get('is_ad')
-                    # is_ad가 "Y"가 아니면 이 필드는 검증에서 제외
                     if is_ad_value is None or str(is_ad_value).upper() != 'Y':
                         continue
                 else:
-                    # frontend_data가 없으면 is_ad를 확인할 수 없으므로 제외
                     continue
-            
-            # 값 처리 (placeholder 치환)
+
             processed_value = replace_placeholders(
                 value,
                 goodscode,
                 frontend_data,
                 environment_override=environment_override
             )
-            
             expected[field_name] = processed_value
+            if is_utlogmap and utlogmap_keys is not None:
+                utlogmap_keys.add(field_name)
 
 
 def _load_config() -> Dict[str, Any]:
@@ -537,11 +524,10 @@ def build_expected_from_module_config(
         exclude_fields = []
 
     expected = {}
+    utlogmap_keys: Set[str] = set()
     event_config_key = EVENT_TYPE_CONFIG_KEY_MAP.get(event_type)
     if event_config_key:
-        # 모듈 config만 사용 (공통 필드 병합 없음)
         event_config = module_config.get(event_config_key, {})
-
         if event_config:
             _process_config_section(
                 event_config,
@@ -551,9 +537,10 @@ def build_expected_from_module_config(
                 exclude_fields,
                 expected,
                 is_common=False,
-                environment_override=environment_override
+                environment_override=environment_override,
+                utlogmap_keys=utlogmap_keys,
             )
-    
+    expected["__utLogMap_keys__"] = utlogmap_keys
     return expected
 
 
