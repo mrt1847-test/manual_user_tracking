@@ -704,6 +704,13 @@ class NetworkTracker:
 
         return None
 
+    def _find_value_inside_utlogmap(self, payload: Dict[str, Any], target_key: str) -> Optional[Any]:
+        """payload에서 utLogMap을 재귀적으로 찾고, 그 노드 안에서만 target_key를 재귀 탐색한다."""
+        utlogmap_node = self._find_value_for_validation(payload, "utLogMap")
+        if utlogmap_node is None:
+            return None
+        return self._find_value_for_validation(utlogmap_node, target_key)
+
     def _validate_payload_fields(
         self,
         payload: Dict[str, Any],
@@ -715,8 +722,16 @@ class NetworkTracker:
         passed_fields: Dict[str, Any] = {}
         errors: List[str] = []
 
+        expected_data = dict(expected_data)
+        utlogmap_keys = expected_data.pop("__utLogMap_keys__", None) or set()
+
         for key, expected_value in expected_data.items():
-            actual_value = payload.get(key) if event_type == "PDP PV" else self._find_value_for_validation(payload, key)
+            if event_type == "PDP PV":
+                actual_value = payload.get(key)
+            elif key in utlogmap_keys:
+                actual_value = self._find_value_inside_utlogmap(payload, key)
+            else:
+                actual_value = self._find_value_for_validation(payload, key)
             field_passed = False
             message = ""
 
@@ -742,8 +757,24 @@ class NetworkTracker:
                 else:
                     message = f"기대값 (리스트 중 하나): {expected_value}, 실제값: {actual_value}"
             else:
-                contains_match_fields = {"spm", "spm-url", "spm-pre", "spm-cnt"}
-                if key in contains_match_fields and isinstance(expected_value, str) and isinstance(actual_value, str):
+                # ab_buckets: 스키마 비어있으면 실제도 비어있어야 PASS; 스키마에 값 있으면 실제값에 스키마 값이 포함되면 PASS
+                if key == "ab_buckets" and isinstance(expected_value, str) and expected_value.strip() != "":
+                    if actual_value is not None and isinstance(actual_value, str):
+                        exp = expected_value.strip()
+                        act = actual_value.strip()
+                        if exp in act or act == exp:
+                            field_passed = True
+                        else:
+                            message = f"기대값(포함 검증): 실제값에 '{expected_value}'이 포함되어야 합니다. 실제값: {actual_value}"
+                    else:
+                        message = f"기대값(포함 검증): 실제값에 '{expected_value}'이 포함되어야 합니다. 실제값: {actual_value}"
+                elif key == "ab_buckets" and (expected_value is None or (isinstance(expected_value, str) and expected_value.strip() == "")):
+                    # 스키마가 비어있으면 실제도 비어있어야 함 (위 빈 문자열 분기에서 이미 처리되나, actual이 다른 타입이면 명시)
+                    if actual_value is None or (isinstance(actual_value, str) and actual_value.strip() == ""):
+                        field_passed = True
+                    else:
+                        message = f'기대값 (빈 문자열): "", 실제값: {actual_value}'
+                elif key in {"spm", "spm-url", "spm-pre", "spm-cnt"} and isinstance(expected_value, str) and isinstance(actual_value, str):
                     expected_normalized = re.sub(r"\d+$", "", expected_value)
                     actual_normalized = re.sub(r"\d+$", "", actual_value)
                     if (
